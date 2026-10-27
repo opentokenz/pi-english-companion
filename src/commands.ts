@@ -43,6 +43,7 @@ export function settingsSummary(settings: EnglishSettings): string {
 		`发送模式：${mode}`,
 		`模型：${settings.model} · 思考强度：${settings.thinkingLevel}`,
 		`上下文：最近 ${settings.contextMessages} 条消息`,
+		`最大输入：${settings.maxInputChars === 0 ? "不限制" : `${settings.maxInputChars} 字符`}`,
 		`英文纠错：${settings.englishCorrection ? "开启" : "关闭"}`,
 	].join("\n");
 }
@@ -215,6 +216,13 @@ async function openSettings(ctx: ExtensionContext, store: SettingsStore, panel: 
 				values: Array.from({ length: MAX_CONTEXT_MESSAGES + 1 }, (_, index) => String(index)),
 			},
 			{
+				id: "maxInputChars",
+				label: "最大输入长度",
+				description: "超过该字符数的消息跳过语言处理；不限制则全部处理",
+				currentValue: settings.maxInputChars === 0 ? "不限制" : String(settings.maxInputChars),
+				values: ["不限制", "1000", "2000", "4000", "8000", "12000", "20000"],
+			},
+			{
 				id: "englishCorrection",
 				label: "英文纠错",
 				description: "关闭后，纯英文消息会原样发送且不做解析",
@@ -235,6 +243,10 @@ async function openSettings(ctx: ExtensionContext, store: SettingsStore, panel: 
 					applyUpdate(ctx, store, { sendMode: value === "en" ? "en" : "raw" });
 				} else if (id === "contextMessages") {
 					applyUpdate(ctx, store, { contextMessages: Number(value) });
+				} else if (id === "maxInputChars") {
+					applyUpdate(ctx, store, {
+						maxInputChars: value === "不限制" ? 0 : Number(value),
+					});
 				} else if (id === "englishCorrection") {
 					applyUpdate(ctx, store, { englishCorrection: value === "on" });
 				} else if (id === "model") {

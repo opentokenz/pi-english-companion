@@ -4,7 +4,7 @@
  */
 
 export type LanguageKind = "zh" | "en" | "mixed";
-export type SkipReason = "empty" | "command" | "code" | "shell" | "data";
+export type SkipReason = "empty" | "command" | "code" | "shell" | "data" | "log";
 
 export interface ProtectedText {
 	/** Text with code replaced by `{{code:N}}` placeholders. */
@@ -31,6 +31,17 @@ const LATIN_WORD_GLOBAL = /[A-Za-z][A-Za-z'’-]*/g;
 
 const STRONG_CODE_START =
 	/^(?:const|let|var|function|class|import|export|default|def|return|async|await|public|private|protected|static|type|interface|enum|struct|impl|fn|func|package|#include|using|namespace|SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|BEGIN|useState|useEffect)\b/i;
+
+const LOG_TIMESTAMP = /^\s*\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/;
+const LOG_TIME = /^\s*\[?\d{2}:\d{2}:\d{2}/;
+const LOG_LEVEL_START =
+	/^\s*(?:\[(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\]|(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\b)/;
+const LOG_LEVEL_ANY = /\b(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\b/;
+const LOG_KEY_VALUE =
+	/\b(?:level|status|statusCode|method|path|duration|requestId|request_id|traceId|trace_id|userId|user_id)=\S+/i;
+const STACK_FRAME = /^\s*at\s+.*:\d+:\d+\)?\s*$|^\s*File ".*", line \d+, in .+$/;
+const TRACEBACK_HEADER = /^\s*Traceback \(most recent call last\):/;
+const JSON_LOG_LINE = /^\s*\{.*"(?:level|msg|message|time|timestamp)"\s*:/;
 
 const SHELL_COMMANDS = new Set([
 	"git",
@@ -126,6 +137,35 @@ function looksLikeStructuredData(text: string): boolean {
 	return false;
 }
 
+/**
+ * Recognize pasted application logs and stack traces.
+ * These are structured data, not prose, and rewriting them has no learning value.
+ */
+function looksLikeLog(text: string): boolean {
+	if (CJK_PATTERN.test(text)) return false;
+	const lines = text
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0);
+	if (lines.length === 0) return false;
+
+	const isLogLine = (line: string): boolean =>
+		LOG_TIMESTAMP.test(line) ||
+		LOG_LEVEL_START.test(line) ||
+		STACK_FRAME.test(line) ||
+		TRACEBACK_HEADER.test(line) ||
+		JSON_LOG_LINE.test(line) ||
+		(LOG_TIME.test(line) && LOG_LEVEL_ANY.test(line)) ||
+		(LOG_LEVEL_ANY.test(line) && LOG_KEY_VALUE.test(line));
+
+	if (lines.length === 1) {
+		const line = lines[0] ?? "";
+		return (LOG_TIMESTAMP.test(line) || LOG_TIME.test(line)) && LOG_LEVEL_ANY.test(line);
+	}
+	const logLines = lines.filter(isLogLine).length;
+	return logLines / lines.length >= 0.5;
+}
+
 function looksLikeCodeLine(line: string): boolean {
 	const trimmed = line.trim();
 	if (!trimmed || CJK_PATTERN.test(trimmed)) return false;
@@ -217,6 +257,7 @@ export function classifyInput(text: string): Classification {
 	if (looksLikeJson(trimmed) || looksLikeMarkup(trimmed) || looksLikeStructuredData(trimmed)) {
 		return { action: "skip", reason: "data" };
 	}
+	if (looksLikeLog(trimmed)) return { action: "skip", reason: "log" };
 
 	const protectedText = protectCode(trimmed);
 	const { prose } = protectedText;

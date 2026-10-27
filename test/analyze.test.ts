@@ -52,6 +52,30 @@ test("skips pure code and shell commands", () => {
 	assert.equal(skip("pytest -q tests/").reason, "shell");
 });
 
+test("skips pasted logs and stack traces", () => {
+	const log = Array.from(
+		{ length: 5 },
+		(_, index) => `2026-01-01T00:00:0${index}Z INFO request completed status=200 path=/api/items`,
+	).join("\n");
+	assert.equal(skip(log).reason, "log");
+	assert.equal(skip("2026-01-01T12:00:00Z ERROR failed to connect").reason, "log");
+	assert.equal(skip("INFO request completed\nWARN retrying request\nERROR gave up").reason, "log");
+	assert.equal(
+		skip("TypeError: x is undefined\n    at foo (/app/a.js:10:5)\n    at bar (/app/b.js:20:3)").reason,
+		"log",
+	);
+	assert.equal(
+		skip('Traceback (most recent call last):\n  File "/app/a.py", line 10, in main\n    run()').reason,
+		"log",
+	);
+});
+
+test("does not mistake prose about errors or times for a log", () => {
+	assert.equal(process("At 12:00 I found an error in the logs and fixed it.").kind, "en");
+	assert.equal(process("Can you explain why this error happens?").kind, "en");
+	assert.equal(process("帮我看看这段日志为什么没有输出").kind, "zh");
+});
+
 test("does not mistake ordinary English for shell commands", () => {
 	assert.equal(process("go ahead and fix it").kind, "en");
 	assert.equal(process("find the bug in this file").kind, "en");

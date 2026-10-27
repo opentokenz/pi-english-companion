@@ -194,6 +194,10 @@ export default function englishCompanion(pi: ExtensionAPI): void {
 
 		const settings = store.get();
 		if (!settings.enabled) return { action: "continue" };
+		if (settings.maxInputChars > 0 && event.text.length > settings.maxInputChars) {
+			// Long pastes are not worth rewriting; send them unchanged.
+			return { action: "continue" };
+		}
 
 		const classification = classifyInput(event.text);
 		if (classification.action === "skip") return { action: "continue" };

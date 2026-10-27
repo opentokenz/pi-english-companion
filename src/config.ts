@@ -28,6 +28,8 @@ export interface EnglishSettings {
 	/** Correct English input instead of leaving it untouched. */
 	englishCorrection: boolean;
 	timeoutMs: number;
+	/** Messages longer than this are skipped; 0 disables the limit. */
+	maxInputChars: number;
 	failurePolicy: "send-raw";
 	/** Internal line budget. Not user configurable in the MVP. */
 	maxWidgetLines: number;
@@ -40,7 +42,8 @@ export const DEFAULT_SETTINGS: EnglishSettings = {
 	thinkingLevel: "low",
 	contextMessages: 4,
 	englishCorrection: true,
-	timeoutMs: 8000,
+	timeoutMs: 15000,
+	maxInputChars: 4000,
 	failurePolicy: "send-raw",
 	maxWidgetLines: 4,
 };
@@ -49,6 +52,8 @@ export const MIN_CONTEXT_MESSAGES = 0;
 export const MAX_CONTEXT_MESSAGES = 10;
 export const MIN_TIMEOUT_MS = 1000;
 export const MAX_TIMEOUT_MS = 60000;
+export const MIN_INPUT_CHARS = 0;
+export const MAX_INPUT_CHARS = 100000;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -94,6 +99,12 @@ export function normalizeSettings(raw: unknown): EnglishSettings {
 				? record.englishCorrection
 				: DEFAULT_SETTINGS.englishCorrection,
 		timeoutMs: clampInt(record.timeoutMs, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS, DEFAULT_SETTINGS.timeoutMs),
+		maxInputChars: clampInt(
+			record.maxInputChars,
+			MIN_INPUT_CHARS,
+			MAX_INPUT_CHARS,
+			DEFAULT_SETTINGS.maxInputChars,
+		),
 		// Only one supported policy today, so malformed input cannot weaken it.
 		failurePolicy: "send-raw",
 		maxWidgetLines: clampInt(record.maxWidgetLines, 2, 4, DEFAULT_SETTINGS.maxWidgetLines),

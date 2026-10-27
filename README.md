@@ -143,7 +143,8 @@ Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接�
 - **英文**：纠正语法、拼写、搭配和不自然表达；已经准确自然的句子保持不变，但仍给出学习要点。
 - **中英混合**：统一成一句自然英文，保留 API 名称、代码标识符、路径和技术术语。
 - **代码保护**：围栏代码块、行内代码和明显未加围栏的代码行会替换成 `{{code:N}}` 占位符。模型必须原样保留占位符，处理完成后按原样还原；如果模型丢失或篡改占位符，本次处理按失败处理并发送原文。
-- **默认跳过**：`/` 命令、`!` Shell 前缀、纯代码、JSON / HTML、Markdown 表格、diff、YAML frontmatter，以及 `npm install`、`git rebase` 这类 Shell 命令。混合消息中的自然语言部分仍会处理。
+- **默认跳过**：`/` 命令、`!` Shell 前缀、纯代码、JSON / HTML、Markdown 表格、diff、YAML frontmatter、日志和堆栈跟踪，以及 `npm install`、`git rebase` 这类 Shell 命令。混合消息中的自然语言部分仍会处理。
+- **输入长度**：消息超过 `maxInputChars`（默认 4000 字符）时跳过语言处理，消息照常发送；设为 `0` 表示不限制。这个检查在调用模型之前完成，不会消耗模型额度。
 - **附件**：`en` 模式改写文本时会保留原始附件；纯附件消息不做语言处理。
 
 上下文只取当前分支最近 `contextMessages` 条用户/助手文本消息，并限制在约 1200 token 的预算内；超出时从较旧的消息开始丢弃。不会擅自添加你未提出的功能要求、约束或技术决策。
@@ -154,7 +155,7 @@ Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接�
 - 也可以固定为某个 `provider/model-id`。配置的模型不可用时会临时回退到 Auto，并提示一次。
 - 默认思考强度 `low`。可选项来自模型自身支持的档位（`off` 到 `max`），不支持的档位会自动收敛到最近的可用档位。
 - 这些设置只用于插件的独立模型调用，不读取也不修改主 Agent 的模型设置。
-- 插件模型调用有独立的输出上限和 8 秒默认超时，不会无限等待。
+- 插件模型调用有独立的输出上限和 15 秒默认超时，不会无限等待。
 
 ## 配置
 
@@ -168,7 +169,8 @@ Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接�
 | `thinkingLevel` | `low` | `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` |
 | `contextMessages` | `4` | 读取最近多少条消息作为上下文，限制 0–10 |
 | `englishCorrection` | `true` | 关闭后纯英文消息原样发送、不生成解析 |
-| `timeoutMs` | `8000` | 单次语言处理超时，限制 1000–60000 |
+| `timeoutMs` | `15000` | 单次语言处理超时，限制 1000–60000 |
+| `maxInputChars` | `4000` | 超过该字符数的消息跳过语言处理；`0` 表示不限制 |
 | `failurePolicy` | `send-raw` | 失败时发送原文；MVP 只有这一种策略 |
 | `maxWidgetLines` | `4` | 面板内部行数上限，通常不需要修改 |
 
@@ -182,7 +184,8 @@ Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接�
   "thinkingLevel": "low",
   "contextMessages": 4,
   "englishCorrection": true,
-  "timeoutMs": 8000,
+  "timeoutMs": 15000,
+  "maxInputChars": 4000,
   "failurePolicy": "send-raw",
   "maxWidgetLines": 4
 }
@@ -248,6 +251,7 @@ src/
 | 提示“没有可用的模型” | 没有可用凭据 | 用 `/login` 或 `/model` 配置模型，再运行 `/english model` |
 | `en` 模式明显变慢 | 该模式本来就要等待语言处理 | 改用 `/english send raw`，或调低 `thinkingLevel` |
 | 配置改了但没生效 | 设置从下一条消息开始生效 | 重新发送消息；必要时重启 Pi |
+| 长文没有学习面板 | 超过 `maxInputChars`，按设计跳过 | 调大配置值，或设为 `0` 取消限制 |
 | 设置写入失败 | 配置目录不可写 | 检查 `~/.pi/agent` 或 `PI_CODING_AGENT_DIR` 的权限 |
 | 英文被截断 | Widget 只显示 2–4 行 | 这是 MVP 的显示限制；完整查看在后续迭代中提供 |
 | 代码被改动 | 模型没有保留占位符 | 本次会自动回退发送原文；如仍出现请附示例开 issue |
@@ -272,7 +276,7 @@ pi -e ./src/index.ts
 
 测试使用 Node 内置测试运行器和 TypeScript 类型擦除，不需要额外构建步骤。覆盖范围包括：
 
-- 输入分类、特殊输入跳过和代码占位符还原
+- 输入分类、特殊输入跳过（含日志和堆栈）、代码占位符还原和输入长度限制
 - 上下文条数、角色过滤和 token 预算
 - 提示词 JSON 解析与容错
 - 超时、取消、无效模型输出

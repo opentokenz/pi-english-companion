@@ -6,6 +6,7 @@ import { afterEach, test } from "node:test";
 import {
 	DEFAULT_SETTINGS,
 	MAX_CONTEXT_MESSAGES,
+	MAX_INPUT_CHARS,
 	SettingsStore,
 	normalizeSettings,
 } from "../src/config.ts";
@@ -50,6 +51,16 @@ test("normalizeSettings keeps only supported thinking levels and the send-raw po
 	assert.equal(normalizeSettings({ thinkingLevel: "turbo" }).thinkingLevel, "low");
 	assert.equal(normalizeSettings({ failurePolicy: "drop" }).failurePolicy, "send-raw");
 	assert.equal(normalizeSettings({ model: "   " }).model, "auto");
+});
+
+test("normalizeSettings clamps the input length and treats zero as unlimited", () => {
+	assert.equal(normalizeSettings({}).maxInputChars, 4000);
+	assert.equal(normalizeSettings({ maxInputChars: 0 }).maxInputChars, 0);
+	assert.equal(normalizeSettings({ maxInputChars: -100 }).maxInputChars, 0);
+	assert.equal(normalizeSettings({ maxInputChars: 900_000 }).maxInputChars, MAX_INPUT_CHARS);
+	assert.equal(normalizeSettings({ maxInputChars: 3999.6 }).maxInputChars, 4000);
+	assert.equal(normalizeSettings({ maxInputChars: "4000" }).maxInputChars, 4000);
+	assert.equal(normalizeSettings({}).timeoutMs, 15000);
 });
 
 test("SettingsStore starts from defaults when the file does not exist", () => {

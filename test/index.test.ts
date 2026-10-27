@@ -221,8 +221,19 @@ test("en mode serializes rapid submissions and the newest result owns the widget
 	assert.ok(!widget.includes("First request."), "the older result must not overwrite the newer one");
 });
 
-test("extension-sourced and special inputs are never processed", async () => {
+test("oversized input is sent unchanged without language processing", async () => {
 	const harness = createHarness();
+	writeFileSync(
+		join(String(harness.ctx.cwd), "english-companion.json"),
+		JSON.stringify({ enabled: true, maxInputChars: 30 }),
+	);
+	const result = await submit(harness, "This English sentence is much longer than thirty characters.");
+	assert.deepEqual(result, { action: "continue" });
+	assert.equal(harness.payloads.length, 0);
+	assert.equal(harness.renderWidget().length, 0);
+});
+
+test("extension-sourced and special inputs are never processed", async () => {	const harness = createHarness();
 	assert.deepEqual(await submit(harness, "帮我把这个函数改成异步的。", "extension"), { action: "continue" });
 	assert.deepEqual(await submit(harness, "npm install --save-dev typescript"), { action: "continue" });
 	assert.deepEqual(await submit(harness, "const x = 1;"), { action: "continue" });
