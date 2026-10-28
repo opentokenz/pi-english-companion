@@ -18,7 +18,7 @@ test("short content uses exactly two lines, one for English and one for analysis
 	assert.equal(layout.rows.length, 2);
 	assert.deepEqual(
 		layout.rows.map((row) => row.label),
-		["EN", "解析"],
+		["EN", "AN"],
 	);
 	assertFits(layout, 80);
 });
@@ -47,7 +47,7 @@ test("English is capped at three lines and the analysis at two", () => {
 	assert.equal(layout.rows.length, 4);
 	assert.deepEqual(
 		layout.rows.map((row) => row.label),
-		["EN", "", "", "解析"],
+		["EN", "", "", "AN"],
 	);
 	assert.equal(layout.rows.at(-1)?.text.endsWith("…"), true);
 	assertFits(layout, 24);

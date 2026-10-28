@@ -20,14 +20,14 @@ function render(width: number, content: Parameters<typeof layoutPanel>[1], color
 	return renderPanelLines(fakeTheme(colors), width, layoutPanel(width, content));
 }
 
-test("renders aligned EN and 解析 labels for a normal terminal", () => {
+test("renders aligned EN and AN labels for a normal terminal", () => {
 	const lines = render(60, {
 		english: "Could you make this function asynchronous?",
 		analysis: "Could you（礼貌请求）/ asynchronous（异步的）",
 	});
 	assert.equal(lines.length, 2);
 	assert.match(lines[0] ?? "", /^ EN\s+Could you make this function asynchronous\?$/);
-	assert.match(lines[1] ?? "", /^ 解析\s+Could you/);
+	assert.match(lines[1] ?? "", /^ AN\s+Could you/);
 });
 
 test("drops labels on narrow terminals so the text keeps its space", () => {
@@ -36,7 +36,7 @@ test("drops labels on narrow terminals so the text keeps its space", () => {
 	for (const line of lines) {
 		assert.ok(visibleWidth(line) <= 12);
 		assert.ok(!line.includes("EN "), `unexpected label: ${JSON.stringify(line)}`);
-		assert.ok(!line.includes("解析"), `unexpected label: ${JSON.stringify(line)}`);
+		assert.ok(!/^ ?AN /.test(line), `unexpected label: ${JSON.stringify(line)}`);
 	}
 });
 
@@ -55,11 +55,15 @@ test("never exceeds the terminal width, even at extreme sizes", () => {
 	}
 });
 
-test("applies accent to the EN label, muted to the analysis, and warning to notices", () => {
+test("applies accent to the EN label, link blue to the analysis label, amber to the analysis body, and warning to notices", () => {
 	const resultColors: Array<{ color: string; text: string }> = [];
 	render(60, { english: "Make it async", analysis: "使异步" }, resultColors);
 	assert.ok(resultColors.some((entry) => entry.color === "accent" && entry.text === "EN"));
-	assert.ok(resultColors.some((entry) => entry.color === "muted" && entry.text === "解析"));
+	assert.ok(resultColors.some((entry) => entry.color === "mdLink" && entry.text === "AN"));
+	assert.ok(
+		resultColors.some((entry) => entry.color === "syntaxString" && entry.text === "使异步"),
+		"the analysis body gets its own amber tone",
+	);
 
 	const noticeColors: Array<{ color: string; text: string }> = [];
 	render(60, { notice: "翻译失败，已发送原文" }, noticeColors);

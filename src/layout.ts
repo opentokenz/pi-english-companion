@@ -24,7 +24,7 @@ export interface PanelContent {
 	notice?: string;
 }
 
-const LABELS = { en: "EN", analysis: "解析", notice: "⚠" } as const;
+const LABELS = { en: "EN", analysis: "AN", notice: "⚠" } as const;
 const LABEL_COLUMN_WIDTH = 5;
 const MIN_LABELED_WIDTH = 16;
 const EN_MAX_LINES = 3;

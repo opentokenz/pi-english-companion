@@ -190,7 +190,7 @@ test("raw mode continues immediately and paints the result asynchronously", asyn
 	const lines = harness.renderWidget();
 	assert.equal(lines.length, 2);
 	assert.ok(lines[0]?.includes("EN"));
-	assert.ok(lines[1]?.includes("解析"));
+	assert.ok(lines[1]?.includes("AN"));
 	assert.ok(harness.payloads[0]?.includes("我在改一个上传组件。"), "recent context should be sent");
 });
 

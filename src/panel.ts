@@ -17,7 +17,7 @@ function styleLabel(theme: Theme, row: PanelRow): string {
 		case "en":
 			return theme.fg("accent", theme.bold(row.label));
 		case "analysis":
-			return theme.fg("muted", row.label);
+			return theme.fg("mdLink", theme.bold(row.label));
 		case "notice":
 			return theme.fg("warning", row.label);
 		case "status":
@@ -30,7 +30,7 @@ function styleBody(theme: Theme, row: PanelRow): string {
 		case "en":
 			return theme.fg("text", theme.bold(row.text));
 		case "analysis":
-			return theme.fg("muted", row.text);
+			return theme.fg("syntaxString", row.text);
 		case "notice":
 			return theme.fg("warning", row.text);
 		case "status":
