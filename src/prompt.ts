@@ -27,6 +27,7 @@ Rewrite rules:
 Learning note rules:
 - Write the note in Chinese, at most 3 short knowledge points, separated by "；".
 - Explain the most useful phrase or grammar. For corrections use "wrong → right（reason）".
+- Never use a knowledge point to describe text kept as-is (identifiers, paths, branch names, commands, {{code:N}} placeholders): no "kept unchanged" remarks, only real language points.
 - When the English was already natural, explain a useful pattern or word choice instead of inventing an error.
 - No markdown, no bullet characters, no line breaks.
 
