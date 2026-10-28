@@ -6,10 +6,11 @@ import { runEnglishCommand } from "./commands.ts";
 import { SettingsStore, MAX_CONTEXT_MESSAGES } from "./config.ts";
 import { extractRecentMessages, formatContext } from "./context.ts";
 import { LatestWins, SerialQueue } from "./coordinator.ts";
+import { appendLanguageLog, errorDetail, LOG_FILE_NAME, SLOW_TASK_MS } from "./diagnostics.ts";
 import { LearningPanel } from "./panel.ts";
-import { effectiveThinking, resolveLanguageModel } from "./models.ts";
+import { effectiveThinking, modelRef, resolveLanguageModel } from "./models.ts";
 import { buildUserPayload, SYSTEM_PROMPT, type LanguageResult } from "./prompt.ts";
-import { LanguageError, requestLanguageResult } from "./processor.ts";
+import { LanguageError, requestLanguageResult, type LanguageErrorCode } from "./processor.ts";
 
 type ProcessableInput = Extract<Classification, { action: "process" }>;
 
@@ -42,7 +43,9 @@ function errorMessage(error: unknown): string {
 }
 
 export default function englishCompanion(pi: ExtensionAPI): void {
-	const store = new SettingsStore(join(getAgentDir(), "english-companion.json"));
+	const agentDir = getAgentDir();
+	const store = new SettingsStore(join(agentDir, "english-companion.json"));
+	const logPath = join(agentDir, LOG_FILE_NAME);
 	const latest = new LatestWins();
 	const enQueue = new SerialQueue();
 	const panel = new LearningPanel(() => store.get().maxWidgetLines);
@@ -113,56 +116,82 @@ export default function englishCompanion(pi: ExtensionAPI): void {
 		signal: AbortSignal,
 	): Promise<LanguageResult> => {
 		const settings = store.get();
-		const resolved = resolveLanguageModel(ctx.modelRegistry, ctx.model, settings.model);
-		if (!resolved) throw new LanguageError("no-model");
-		if (resolved.note && resolved.note !== announcedModelNote) {
-			announcedModelNote = resolved.note;
-			notify(ctx, resolved.note, "warning");
-		}
-
-		const context = formatContext(
-			extractRecentMessages(ctx.sessionManager.getBranch(), settings.contextMessages),
-		);
-		const payload = buildUserPayload({
-			kind: classification.kind,
-			context,
-			text: classification.protected.masked,
-		});
-		const model = resolved.model;
-		const reasoning = effectiveThinking(model, settings.thinkingLevel);
-		const userMessage: UserMessage = {
-			role: "user",
-			content: payload,
-			timestamp: Date.now(),
+		const startedAt = Date.now();
+		const chars = classification.protected.masked.length;
+		let selectedModel: string | undefined;
+		const elapsed = (): number => Date.now() - startedAt;
+		const logEntry = (event: "failure" | "slow", code: LanguageErrorCode | "ok", error?: string): void => {
+			appendLanguageLog(logPath, {
+				event,
+				code,
+				...(selectedModel ? { model: selectedModel } : {}),
+				kind: classification.kind,
+				elapsedMs: elapsed(),
+				timeoutMs: settings.timeoutMs,
+				chars,
+				...(error ? { error } : {}),
+			});
 		};
 
-		const parsed = await requestLanguageResult({
-			timeoutMs: settings.timeoutMs,
-			signal,
-			generate: async (taskSignal) => {
-				const stream = ctx.modelRegistry.streamSimple(
-					model,
-					{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
-					{
-						signal: taskSignal,
-						maxTokens: 2048,
-						...(reasoning ? { reasoning } : {}),
-					},
-				);
-				const message = await stream.result();
-				if (message.stopReason === "aborted") throw new Error("aborted");
-				if (message.stopReason === "error") throw new Error(message.errorMessage ?? "model error");
-				return message.content
-					.filter((block): block is { type: "text"; text: string } => block.type === "text")
-					.map((block) => block.text)
-					.join("\n");
-			},
-		});
+		try {
+			const resolved = resolveLanguageModel(ctx.modelRegistry, ctx.model, settings.model);
+			if (!resolved) throw new LanguageError("no-model");
+			selectedModel = modelRef(resolved.model);
+			if (resolved.note && resolved.note !== announcedModelNote) {
+				announcedModelNote = resolved.note;
+				notify(ctx, resolved.note, "warning");
+			}
 
-		// Put protected code back exactly as the user wrote it, or fail closed.
-		const restored = classification.protected.restore(parsed.english);
-		if (restored === null) throw new LanguageError("invalid");
-		return { english: restored, analysis: parsed.analysis };
+			const context = formatContext(
+				extractRecentMessages(ctx.sessionManager.getBranch(), settings.contextMessages),
+			);
+			const payload = buildUserPayload({
+				kind: classification.kind,
+				context,
+				text: classification.protected.masked,
+			});
+			const model = resolved.model;
+			const reasoning = effectiveThinking(model, settings.thinkingLevel);
+			const userMessage: UserMessage = {
+				role: "user",
+				content: payload,
+				timestamp: Date.now(),
+			};
+
+			const parsed = await requestLanguageResult({
+				timeoutMs: settings.timeoutMs,
+				signal,
+				generate: async (taskSignal) => {
+					const stream = ctx.modelRegistry.streamSimple(
+						model,
+						{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
+						{
+							signal: taskSignal,
+							maxTokens: 2048,
+							...(reasoning ? { reasoning } : {}),
+						},
+					);
+					const message = await stream.result();
+					if (message.stopReason === "aborted") throw new Error("aborted");
+					if (message.stopReason === "error") throw new Error(message.errorMessage ?? "model error");
+					return message.content
+						.filter((block): block is { type: "text"; text: string } => block.type === "text")
+						.map((block) => block.text)
+						.join("\n");
+				},
+			});
+
+			// Put protected code back exactly as the user wrote it, or fail closed.
+			const restored = classification.protected.restore(parsed.english);
+			if (restored === null) throw new LanguageError("invalid");
+
+			// Only near-timeout successes are logged, so the log stays focused.
+			if (elapsed() >= SLOW_TASK_MS) logEntry("slow", "ok");
+			return { english: restored, analysis: parsed.analysis };
+		} catch (error) {
+			logEntry("failure", error instanceof LanguageError ? error.code : "failed", errorDetail(error));
+			throw error;
+		}
 	};
 
 	pi.on("session_start", (_event, ctx) => {

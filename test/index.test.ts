@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -44,7 +44,7 @@ interface Harness {
 	ctx: Record<string, unknown>;
 }
 
-function createHarness(options: { mode?: "tui" | "print" } = {}): Harness {
+function createHarness(options: { mode?: "tui" | "print"; hang?: boolean } = {}): Harness {
 	const agentDir = mkdtempSync(join(tmpdir(), "pi-english-e2e-"));
 	tempDirs.push(agentDir);
 	process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -88,6 +88,11 @@ function createHarness(options: { mode?: "tui" | "print" } = {}): Harness {
 			getAvailable: () => [fakeModel],
 			streamSimple: (_model: unknown, context: { messages: Array<{ content: string }> }) => {
 				payloads.push(context.messages[0]?.content ?? "");
+				if (options.hang) {
+					return {
+						result: () => new Promise<AssistantMessage>(() => {}),
+					} as unknown as AssistantMessageEventStream;
+				}
 				const text = typeof reply === "function" ? reply() : reply;
 				const message = {
 					role: "assistant",
@@ -140,6 +145,24 @@ function createHarness(options: { mode?: "tui" | "print" } = {}): Harness {
 		},
 	};
 	return harness;
+}
+
+function logPath(harness: Harness): string {
+	return join(String(harness.ctx.cwd), "english-companion.log");
+}
+
+function logEntries(harness: Harness): Array<Record<string, unknown>> {
+	const path = logPath(harness);
+	if (!existsSync(path)) return [];
+	return readFileSync(path, "utf8")
+		.trimEnd()
+		.split("\n")
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+function loggedCode(harness: Harness, code: string): boolean {
+	return logEntries(harness).some((entry) => entry.code === code);
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
@@ -268,4 +291,33 @@ test("disabled English correction leaves English input alone but still handles C
 	const chinese = await submit(harness, "帮我修一个 bug");
 	assert.equal(chinese.action, "continue");
 	await waitFor(() => harness.payloads.length === 1);
+});
+
+test("model failures are appended to the diagnostics log with the failure code", async () => {
+	const harness = createHarness();
+	harness.setReply("this is not json");
+	await submit(harness, "帮我把这个函数改成异步的。");
+	await waitFor(() => loggedCode(harness, "invalid"));
+	const entry = logEntries(harness).at(-1);
+	assert.equal(entry?.event, "failure");
+	assert.equal(entry?.code, "invalid");
+	assert.equal(entry?.model, "test/test-model");
+	assert.equal(entry?.kind, "zh");
+	assert.equal(entry?.timeoutMs, 15000);
+	assert.equal(typeof entry?.elapsedMs, "number");
+	assert.ok(!JSON.stringify(entry).includes("帮我把这个函数改成异步的"), "the log must not contain the input text");
+});
+
+test("a timeout is logged with the elapsed time and the configured limit", async () => {
+	const harness = createHarness({ hang: true });
+	writeFileSync(
+		join(String(harness.ctx.cwd), "english-companion.json"),
+		JSON.stringify({ timeoutMs: 1000 }),
+	);
+	await submit(harness, "帮我把这个函数改成异步的。");
+	await waitFor(() => loggedCode(harness, "timeout"), 5000);
+	const entry = logEntries(harness).at(-1);
+	assert.equal(entry?.event, "failure");
+	assert.equal(entry?.timeoutMs, 1000);
+	assert.ok(Number(entry?.elapsedMs) >= 900, "elapsed time should reach the timeout");
 });

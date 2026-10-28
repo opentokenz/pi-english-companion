@@ -220,6 +220,7 @@ src/
   prompt.ts        系统提示词、请求载荷、JSON 解析
   processor.ts     带超时和取消的单次语言任务
   context.ts       当前分支上下文提取与 token 预算
+  diagnostics.ts   失败与慢任务诊断日志（本地 JSONL，不含原文）
   layout.ts        纯函数 2–4 行布局与截断
   panel.ts         Widget 状态与主题渲染
   models.ts        模型解析、思考强度收敛
@@ -238,10 +239,13 @@ src/
 - 会话切换、fork、分支跳转和 Pi 退出会中止在途任务并清理面板
 - `/english off` 会停止后续处理并隐藏面板，已发出的消息不受影响。
 - 未预期的扩展异常也会回退发送原文，避免吞掉用户消息。
+- 诊断日志写入失败不会阻塞或改变消息处理。
 
 ## 隐私
 
-语言处理会把你当前的消息和最近 `contextMessages` 条上下文发送给插件选择的模型 provider，使用的是 Pi 已配置好的凭据。插件不写日志、不上传其他数据，也不包含遥测；`/english off` 会停止全部语言请求。
+语言处理会把你当前的消息和最近 `contextMessages` 条上下文发送给插件选择的模型 provider，使用的是 Pi 已配置好的凭据。插件不上传任何数据，也不包含遥测；`/english off` 会停止全部语言请求。
+
+本地会写一份诊断日志（见[故障排查](#故障排查)），只记录错误码、模型、耗时和字符数，不记录消息原文。
 
 ## 故障排查
 
@@ -250,11 +254,14 @@ src/
 | 看不到 Widget | 非 TUI 模式，或插件被关闭 | 在交互式 Pi 中运行；执行 `/english on` |
 | 提示“没有可用的模型” | 没有可用凭据 | 用 `/login` 或 `/model` 配置模型，再运行 `/english model` |
 | `en` 模式明显变慢 | 该模式本来就要等待语言处理 | 改用 `/english send raw`，或调低 `thinkingLevel` |
+| 提示“处理超时”或“处理失败” | 模型或网关慢、上游报错 | 查看诊断日志里的 `code` 与 `error`；必要时调大 `timeoutMs` |
 | 配置改了但没生效 | 设置从下一条消息开始生效 | 重新发送消息；必要时重启 Pi |
 | 长文没有学习面板 | 超过 `maxInputChars`，按设计跳过 | 调大配置值，或设为 `0` 取消限制 |
 | 设置写入失败 | 配置目录不可写 | 检查 `~/.pi/agent` 或 `PI_CODING_AGENT_DIR` 的权限 |
 | 英文被截断 | Widget 只显示 2–4 行 | 这是 MVP 的显示限制；完整查看在后续迭代中提供 |
 | 代码被改动 | 模型没有保留占位符 | 本次会自动回退发送原文；如仍出现请附示例开 issue |
+
+插件在 `~/.pi/agent/english-companion.log` 追加 JSONL 诊断记录（目录同样受 `PI_CODING_AGENT_DIR` 影响）。失败总是记录，耗时超过 5000 毫秒的成功任务记为 `slow`，这样超时前就能看到趋势。每条记录包含 `time`、`event`、`code`、`model`、`kind`、`elapsedMs`、`timeoutMs`、`chars` 和 `error`；`code` 为 `timeout` / `failed` / `invalid` / `aborted` / `no-model` / `ok`。输入原文不会写入。文件超过 256 KiB 时轮转为 `.1`，只保留一份历史。
 
 ## 开发
 
