@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { layoutPanel, type PanelLayout } from "../src/layout.ts";
 
 function assertFits(layout: PanelLayout, width: number): void {
@@ -23,13 +23,13 @@ test("short content uses exactly two lines, one for English and one for analysis
 	assertFits(layout, 80);
 });
 
-test("long English expands before the analysis and stays within four lines", () => {
+test("long English wraps across as many lines as it needs", () => {
 	const layout = layoutPanel(40, {
 		english:
 			"Could you please refactor this helper so that it returns a promise and update every caller in the module accordingly?",
 		analysis: "refactor（重构）",
 	});
-	assert.ok(layout.rows.length >= 3 && layout.rows.length <= 4);
+	assert.ok(layout.rows.length >= 3);
 	const enRows = layout.rows.filter((row) => row.kind === "en");
 	const zhRows = layout.rows.filter((row) => row.kind === "analysis");
 	assert.ok(enRows.length >= 2, "long English should use multiple lines");
@@ -37,41 +37,48 @@ test("long English expands before the analysis and stays within four lines", () 
 	assertFits(layout, 40);
 });
 
-test("English is capped at three lines and the analysis at two", () => {
-	const layout = layoutPanel(24, {
-		english:
-			"Could you refactor this helper so that it returns a promise, then update every caller in the module and its tests accordingly?",
-		analysis:
-			"refactor（重构）/ promise（承诺、异步结果）/ caller（调用方）/ accordingly（相应地）",
-	});
-	assert.equal(layout.rows.length, 4);
-	assert.deepEqual(
-		layout.rows.map((row) => row.label),
-		["EN", "", "", "AN"],
-	);
-	assert.equal(layout.rows.at(-1)?.text.endsWith("…"), true);
+test("long content is no longer capped at four lines", () => {
+	const english =
+		"Could you refactor this helper so that it returns a promise, then update every caller in the module and its tests accordingly?";
+	const analysis = "refactor（重构）/ promise（承诺、异步结果）/ caller（调用方）/ accordingly（相应地）";
+	const layout = layoutPanel(24, { english, analysis });
+	const bodyWidth = 24 - layout.labelWidth;
+	const expected =
+		wrapTextWithAnsi(english, bodyWidth).length + wrapTextWithAnsi(analysis, bodyWidth).length;
+
+	assert.equal(layout.rows.length, expected);
+	assert.ok(layout.rows.length > 4, `expected more than four lines, got ${layout.rows.length}`);
+	const labels = layout.rows.map((row) => row.label);
+	assert.equal(labels[0], "EN");
+	assert.equal(layout.rows.find((row) => row.kind === "analysis")?.label, "AN");
+	for (const row of layout.rows) {
+		assert.ok(!row.text.endsWith("…"), `line was truncated: ${JSON.stringify(row.text)}`);
+	}
 	assertFits(layout, 24);
 });
 
-test("English completeness wins over analysis detail when both overflow", () => {
-	const layout = layoutPanel(30, {
-		english:
-			"Could you please refactor this helper so that it returns a promise and update every caller in the module?",
-		analysis: "refactor（重构）/ promise（异步）/ caller（调用方）",
-	});
+test("both sections keep every wrapped line when they overflow together", () => {
+	const english =
+		"Could you please refactor this helper so that it returns a promise and update every caller in the module?";
+	const analysis = "refactor（重构）/ promise（异步）/ caller（调用方）/ 更直接的语气";
+	const layout = layoutPanel(30, { english, analysis });
+	const bodyWidth = 30 - layout.labelWidth;
 	const enRows = layout.rows.filter((row) => row.kind === "en");
 	const zhRows = layout.rows.filter((row) => row.kind === "analysis");
-	assert.equal(enRows.length, 3);
-	assert.equal(zhRows.length, 1);
+
+	assert.equal(enRows.length, wrapTextWithAnsi(english, bodyWidth).length);
+	assert.equal(zhRows.length, wrapTextWithAnsi(analysis, bodyWidth).length);
+	assert.ok(enRows.length >= 2 && zhRows.length >= 2);
 });
 
-test("short English leaves room for two analysis lines", () => {
-	const layout = layoutPanel(26, {
-		english: "Make it async?",
-		analysis: "Could you（礼貌请求）/ make ... async（使异步）/ 省略主语更自然",
-	});
-	assert.equal(layout.rows.length, 3);
-	assert.equal(layout.rows.filter((row) => row.kind === "analysis").length, 2);
+test("a short English line keeps the whole wrapped analysis", () => {
+	const analysis = "Could you（礼貌请求）/ make ... async（使异步）/ 省略主语更自然";
+	const layout = layoutPanel(26, { english: "Make it async?", analysis });
+	const bodyWidth = 26 - layout.labelWidth;
+	const analysisLines = wrapTextWithAnsi(analysis, bodyWidth).length;
+
+	assert.equal(layout.rows.map((row) => row.kind).join(","), ["en", ...Array(analysisLines).fill("analysis")].join(","));
+	assert.ok(analysisLines >= 2);
 	assertFits(layout, 26);
 });
 
@@ -95,15 +102,6 @@ test("narrow terminals drop labels instead of squeezing the text", () => {
 	assert.equal(layout.labelWidth, 0);
 	assert.ok(layout.rows.length >= 2);
 	assertFits(layout, 10);
-});
-
-test("respects a reduced internal line budget", () => {
-	const layout = layoutPanel(20, {
-		english: "Could you refactor this helper and update all of its callers?",
-		analysis: "refactor（重构）/ caller（调用方）",
-	}, 2);
-	assert.equal(layout.rows.length, 2);
-	assertFits(layout, 20);
 });
 
 test("processing state uses two lightweight lines", () => {

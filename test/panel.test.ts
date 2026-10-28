@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { layoutPanel } from "../src/layout.ts";
-import { renderPanelLines } from "../src/panel.ts";
+import { renderPanelLines, panelInnerWidth } from "../src/panel.ts";
 
 function fakeTheme(colors: Array<{ color: string; text: string }> = []): Theme {
 	return {
@@ -17,7 +17,7 @@ function fakeTheme(colors: Array<{ color: string; text: string }> = []): Theme {
 }
 
 function render(width: number, content: Parameters<typeof layoutPanel>[1], colors?: Array<{ color: string; text: string }>) {
-	return renderPanelLines(fakeTheme(colors), width, layoutPanel(width, content));
+	return renderPanelLines(fakeTheme(colors), width, layoutPanel(panelInnerWidth(width), content));
 }
 
 test("renders aligned EN and AN labels for a normal terminal", () => {
@@ -52,6 +52,27 @@ test("never exceeds the terminal width, even at extreme sizes", () => {
 				`line ${JSON.stringify(line)} is ${visibleWidth(line)} wide at width ${width}`,
 			);
 		}
+	}
+});
+
+test("rows that fill the terminal keep their last character", () => {
+	const content = {
+		english: "Could you make this function asynchronous before the next release?",
+		analysis: "asynchronous（异步的）/ 中文解析也要完整显示，不能被尾部的列宽保留咬掉",
+	};
+	for (let width = 16; width <= 72; width += 1) {
+		const layout = layoutPanel(panelInnerWidth(width), content);
+		const lines = renderPanelLines(fakeTheme(), width, layout);
+		lines.forEach((line, index) => {
+			const row = layout.rows[index];
+			assert.ok(row, `missing row ${index} at width ${width}`);
+			assert.ok(
+				line.includes(row.text),
+				`width ${width}: ${JSON.stringify(row.text)} was clipped from ${JSON.stringify(line)}`,
+			);
+			assert.ok(visibleWidth(line) <= width, `width ${width}: ${JSON.stringify(line)} is too wide`);
+			assert.ok(!line.includes("\u001b"), `width ${width}: truncation leaked an escape code`);
+		});
 	}
 });
 

@@ -4,7 +4,7 @@
 [![Pi](https://img.shields.io/badge/Pi-%E2%89%A51.4-6f42c1)](https://pi.dev)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A524%20for%20development-339933)](https://nodejs.org)
 
-在 [Pi Coding Agent](https://pi.dev) 里顺手练英语。你照常用中文、英文或中英混合和 Pi 对话，它在输入框上方用 2–4 行显示更自然的英文表达和简短中文解析。消息照常发送，输入框不被接管，工作流不被打断。
+在 [Pi Coding Agent](https://pi.dev) 里顺手练英语。你照常用中文、英文或中英混合和 Pi 对话，它在输入框上方显示更自然的英文表达和简短中文解析。消息照常发送，输入框不被接管，工作流不被打断。
 
 > Pi English Companion is a context-aware English learning extension for the Pi coding agent. It rewrites your latest Chinese, English, or mixed-language message into natural English and shows a short Chinese learning note in a 2–4 line widget above the editor. `raw` mode never delays the agent, and code, commands, and attachments are preserved.
 
@@ -24,7 +24,7 @@
 - 可切换 `en` 模式：等待处理完成，把英文发给 Agent
 - 独立模型与思考强度，不影响主 Agent
 - 代码块、行内代码、Shell 命令和结构化数据不会被强行改写
-- 2–4 行动态 Widget，遵循当前 Pi 主题，终端变窄时自动重排
+- 行数随内容伸缩的动态 Widget，遵循当前 Pi 主题，终端变窄时自动重排
 
 ## 效果
 
@@ -119,25 +119,14 @@ pi -e ./src/index.ts
 
 Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接管输入、光标、键盘事件或输入历史。
 
-- 默认 2 行，内容变长时最多扩展到 4 行，不预留空白行
-- 英文最多 3 行，解析最多 2 行，超出用省略号截断
+- 短内容占 2 行（英文 1 行 + 解析 1 行），长内容按需增高，不预留空白行
+- 行数不设上限：英文和解析都完整换行，不截断、不加省略号
 - 根据终端实际宽度换行；终端过窄时自动隐藏 `EN` / `AN` 标签
 - `EN` 标签用主题强调色，`AN` 标签用次级蓝色，正文保持对文字的默认色
 - 解析正文用主题的琥珀色（`syntaxString` token，浅色 5.44:1、深色 6.40:1 对比度），和改写的英文一眼分开
-- 优先保证英文完整，再分配解析空间
 - 解析优先展示最有价值的 1–3 个知识点
 - 处理中显示两行轻量状态；失败时短暂显示一行警告，然后恢复上一次成功结果
 - 切换会话、fork、分支跳转或关闭插件时清除面板
-
-推荐的行数分配：
-
-| 总行数 | 英文 | 解析 |
-| --- | --- | --- |
-| 2 | 1 | 1 |
-| 3 | 2 | 1 |
-| 3（另一种） | 1 | 2 |
-| 4 | 3 | 1 |
-| 4（另一种） | 2 | 2 |
 
 ## 输入处理
 
@@ -174,7 +163,6 @@ Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接�
 | `timeoutMs` | `15000` | 单次语言处理超时，限制 1000–60000 |
 | `maxInputChars` | `4000` | 超过该字符数的消息跳过语言处理；`0` 表示不限制 |
 | `failurePolicy` | `send-raw` | 失败时发送原文；MVP 只有这一种策略 |
-| `maxWidgetLines` | `4` | 面板内部行数上限，通常不需要修改 |
 
 完整示例：
 
@@ -188,8 +176,7 @@ Widget 位于原生输入框正上方，由 Pi 的 Widget 区域渲染，不接�
   "englishCorrection": true,
   "timeoutMs": 15000,
   "maxInputChars": 4000,
-  "failurePolicy": "send-raw",
-  "maxWidgetLines": 4
+  "failurePolicy": "send-raw"
 }
 ```
 
@@ -223,7 +210,7 @@ src/
   processor.ts     带超时和取消的单次语言任务
   context.ts       当前分支上下文提取与 token 预算
   diagnostics.ts   失败与慢任务诊断日志（本地 JSONL，不含原文）
-  layout.ts        纯函数 2–4 行布局与截断
+  layout.ts        纯函数换行布局与宽度适配
   panel.ts         Widget 状态与主题渲染
   models.ts        模型解析、思考强度收敛
   model-picker.ts  可搜索的模型列表
@@ -260,7 +247,7 @@ src/
 | 配置改了但没生效 | 设置从下一条消息开始生效 | 重新发送消息；必要时重启 Pi |
 | 长文没有学习面板 | 超过 `maxInputChars`，按设计跳过 | 调大配置值，或设为 `0` 取消限制 |
 | 设置写入失败 | 配置目录不可写 | 检查 `~/.pi/agent` 或 `PI_CODING_AGENT_DIR` 的权限 |
-| 英文被截断 | Widget 只显示 2–4 行 | 这是 MVP 的显示限制；完整查看在后续迭代中提供 |
+| 面板过高挤占屏幕 | 面板行数不设上限，内容长就高 | 发短一些的消息，或调低 `maxInputChars` 让长消息跳过处理 |
 | 代码被改动 | 模型没有保留占位符 | 本次会自动回退发送原文；如仍出现请附示例开 issue |
 
 插件在 `~/.pi/agent/english-companion.log` 追加 JSONL 诊断记录（目录同样受 `PI_CODING_AGENT_DIR` 影响）。失败总是记录，耗时超过 5000 毫秒的成功任务记为 `slow`，这样超时前就能看到趋势。每条记录包含 `time`、`event`、`code`、`model`、`kind`、`elapsedMs`、`timeoutMs`、`chars` 和 `error`；`code` 为 `timeout` / `failed` / `invalid` / `aborted` / `no-model` / `ok`。输入原文不会写入。文件超过 256 KiB 时轮转为 `.1`，只保留一份历史。
@@ -289,7 +276,7 @@ pi -e ./src/index.ts
 - 上下文条数、角色过滤和 token 预算
 - 提示词 JSON 解析与容错
 - 超时、取消、无效模型输出
-- 2–4 行布局、宽字符、emoji、窄终端截断
+- 不设行数上限的换行布局、宽字符、emoji、窄终端
 - 模型列表过滤和配置迁移
 - 用假 Pi API 驱动的 `raw` / `en` 端到端路径
 

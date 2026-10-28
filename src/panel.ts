@@ -4,8 +4,6 @@ import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { layoutPanel, type PanelContent, type PanelLayout, type PanelRow } from "./layout.ts";
 
 const WIDGET_KEY = "pi-english-companion";
-/** Same internal cap as the PRD; not user configurable in the MVP. */
-export const PANEL_MAX_LINES = 4;
 
 export type PanelState =
 	| { kind: "hidden" }
@@ -44,10 +42,15 @@ function renderRow(theme: Theme, row: PanelRow, labelWidth: number): string {
 	return `${label}${padding}${styleBody(theme, row)}`;
 }
 
+/** Width the rows may occupy: the widget reserves one column of trailing space. */
+export function panelInnerWidth(width: number): number {
+	return Math.max(1, width - 1);
+}
+
 /** Pure render step, exported for layout checks. */
 export function renderPanelLines(theme: Theme, width: number, layout: PanelLayout): string[] {
 	const padding = width > 1 ? " " : "";
-	const innerWidth = Math.max(1, width - padding.length);
+	const innerWidth = panelInnerWidth(width);
 	return layout.rows.map((row) => {
 		const line = layout.labelWidth > 0 ? renderRow(theme, row, layout.labelWidth) : styleBody(theme, row);
 		// Trailing guard for terminals narrower than the label column.
@@ -55,10 +58,11 @@ export function renderPanelLines(theme: Theme, width: number, layout: PanelLayou
 	});
 }
 
-function createPanelComponent(theme: Theme, content: PanelContent, maxLines: number): Component {
+function createPanelComponent(theme: Theme, content: PanelContent): Component {
 	return {
 		render(width: number): string[] {
-			return renderPanelLines(theme, width, layoutPanel(width, content, maxLines));
+			// Lay out against the same width renderPanelLines can actually write.
+			return renderPanelLines(theme, width, layoutPanel(panelInnerWidth(width), content));
 		},
 		invalidate(): void {
 			// Stateless: everything is recomputed from the live theme on each render.
@@ -72,11 +76,6 @@ function createPanelComponent(theme: Theme, content: PanelContent, maxLines: num
  */
 export class LearningPanel {
 	private visible = false;
-	private readonly getMaxLines: () => number;
-
-	constructor(getMaxLines: () => number = () => PANEL_MAX_LINES) {
-		this.getMaxLines = getMaxLines;
-	}
 
 	apply(ctx: ExtensionContext, state: PanelState): void {
 		if (ctx.mode !== "tui") return;
@@ -85,8 +84,7 @@ export class LearningPanel {
 			return;
 		}
 		const content = state.content;
-		const maxLines = this.getMaxLines();
-		ctx.ui.setWidget(WIDGET_KEY, (_tui, theme) => createPanelComponent(theme, content, maxLines), {
+		ctx.ui.setWidget(WIDGET_KEY, (_tui, theme) => createPanelComponent(theme, content), {
 			placement: "aboveEditor",
 		});
 		this.visible = true;

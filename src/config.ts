@@ -31,8 +31,6 @@ export interface EnglishSettings {
 	/** Messages longer than this are skipped; 0 disables the limit. */
 	maxInputChars: number;
 	failurePolicy: "send-raw";
-	/** Internal line budget. Not user configurable in the MVP. */
-	maxWidgetLines: number;
 }
 
 export const DEFAULT_SETTINGS: EnglishSettings = {
@@ -45,7 +43,6 @@ export const DEFAULT_SETTINGS: EnglishSettings = {
 	timeoutMs: 15000,
 	maxInputChars: 4000,
 	failurePolicy: "send-raw",
-	maxWidgetLines: 4,
 };
 
 export const MIN_CONTEXT_MESSAGES = 0;
@@ -107,7 +104,6 @@ export function normalizeSettings(raw: unknown): EnglishSettings {
 		),
 		// Only one supported policy today, so malformed input cannot weaken it.
 		failurePolicy: "send-raw",
-		maxWidgetLines: clampInt(record.maxWidgetLines, 2, 4, DEFAULT_SETTINGS.maxWidgetLines),
 	};
 }
 

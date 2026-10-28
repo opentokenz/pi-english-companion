@@ -48,7 +48,7 @@ export default function englishCompanion(pi: ExtensionAPI): void {
 	const logPath = join(agentDir, LOG_FILE_NAME);
 	const latest = new LatestWins();
 	const enQueue = new SerialQueue();
-	const panel = new LearningPanel(() => store.get().maxWidgetLines);
+	const panel = new LearningPanel();
 
 	let lastResult: LanguageResult | undefined;
 	let abortCurrent: AbortController | undefined;
