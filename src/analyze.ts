@@ -234,6 +234,19 @@ function isShellLike(raw: string, prose: string): boolean {
 	return /(?:^|\s)-{1,2}[\w-]+|\/|\.\w+|=/.test(rest) && tokens.length <= 6;
 }
 
+/**
+ * A leading `/` is a command (`/english on`, `/skill:fix-bug`) or an absolute path,
+ * such as the one Pi inserts for an attached image (`/var/.../pi-clipboard-a1.png`).
+ */
+function looksLikeSlashCommand(text: string): boolean {
+	if (!text.startsWith("/")) return false;
+	const name = (text.split(/\s+/, 1)[0] ?? "").slice(1);
+	if (!name) return false;
+	// Multi-segment paths and file names with an extension are data, not commands.
+	if (name.includes("/") || /\.[A-Za-z0-9]+$/.test(name)) return false;
+	return /^[A-Za-z][\w:-]*$/.test(name);
+}
+
 function looksLikeBareCode(raw: string, prose: string): boolean {
 	if (CJK_PATTERN.test(raw)) return false;
 	if (/^\s*(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b/i.test(raw)) return true;
@@ -251,8 +264,8 @@ export function classifyInput(text: string): Classification {
 	const trimmed = text.trim();
 	if (!trimmed) return { action: "skip", reason: "empty" };
 
-	// Pi handles registered `/` commands itself; anything reaching here is not for the agent.
-	if (trimmed.startsWith("/")) return { action: "skip", reason: "command" };
+	// Pi handles registered `/` commands itself; those are slash commands, not prose.
+	if (looksLikeSlashCommand(trimmed)) return { action: "skip", reason: "command" };
 	if (trimmed.startsWith("!")) return { action: "skip", reason: "shell" };
 	if (looksLikeJson(trimmed) || looksLikeMarkup(trimmed) || looksLikeStructuredData(trimmed)) {
 		return { action: "skip", reason: "data" };

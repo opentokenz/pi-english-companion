@@ -41,6 +41,13 @@ test("skips empty, slash commands, bash prefixes and structured data", () => {
 	assert.equal(skip("diff --git a/a.ts b/a.ts\n@@ -1,2 +1,2 @@").reason, "data");
 });
 
+test("treats a pasted image path as data, not as a slash command", () => {
+	const pasted = "/var/folders/vs/1rgnm8p95vx9snxtlb071rtm0000gn/T/pi-clipboard-a1.png\nfix: bug: bootstrap error on no any session";
+	assert.equal(process(pasted).kind, "en");
+	assert.equal(skip("/skill:fix-bug").reason, "command");
+	assert.equal(process("/tmp/a.png 这个文件是空的").kind, "mixed");
+});
+
 test("skips pure code and shell commands", () => {
 	assert.equal(skip("const answer = items.map((item) => item.id);").reason, "code");
 	assert.equal(skip("function foo(a, b) {\n  return a + b;\n}").reason, "code");
